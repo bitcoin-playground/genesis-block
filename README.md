@@ -3,7 +3,7 @@ Script Python per creare i parametri necessari per un blocco genesis unico con a
 
 ## Caratteristiche
 - Algoritmo: **SHA256** (double SHA-256)
-- Supporto per **indirizzi bech32** (SegWit native, P2WPKH e P2WSH)
+- Supporto per indirizzi **bech32** (P2WPKH, P2WSH), **base58** (P2PKH) e chiavi pubbliche (P2PK)
 - Mining multi-thread per ottimizzare la ricerca del nonce
 - Compatibile con Bitcoin e fork basati su SHA256
 
@@ -68,8 +68,7 @@ Opzioni:
                         la ricerca dell'hash genesis (default: 0)
 
   -p ADDRESS, --address=ADDRESS
-                        L'indirizzo bech32 per l'output script (es: bc1q... per mainnet,
-                        tb1q... per testnet) (default: bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4)
+                        L'indirizzo (bech32, base58) o la chiave pubblica (hex) per l'output script (default: bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4)
 
   -v VALUE, --value=VALUE
                         Il valore in coin per l'output, valore completo
@@ -88,11 +87,17 @@ Opzioni:
 
 ## Tipi di indirizzi supportati
 
-### P2WPKH (Pay-to-Witness-Public-Key-Hash)
-Indirizzi bech32 con 20 bytes (esempio: `bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4`)
+Lo script supporta tre formati per specificare il destinatario dei fondi:
 
-### P2WSH (Pay-to-Witness-Script-Hash)
-Indirizzi bech32 con 32 bytes (esempio: `bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3`)
+### 1. Indirizzi bech32 (SegWit)
+- **P2WPKH (Pay-to-Witness-Public-Key-Hash)**: Indirizzi con 20 byte di dati (es: `bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4`).
+- **P2WSH (Pay-to-Witness-Script-Hash)**: Indirizzi con 32 byte di dati (es: `bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3`).
+
+### 2. Indirizzi base58 (P2PKH)
+- **P2PKH (Pay-to-Public-Key-Hash)**: Indirizzi legacy che iniziano solitamente con `1` (es: `1BoatSLRHtKNngkdXEeobR76b53LETtpyT`).
+
+### 3. Chiave pubblica esadecimale (P2PK)
+- **P2PK (Pay-to-Public-Key)**: Una chiave pubblica non compressa (65 byte) o compressa (33 byte) in formato esadecimale.
 
 ## Note tecniche
 
@@ -120,11 +125,11 @@ genesis_hash = SHA256(SHA256(block_header))
 
 ## Risoluzione problemi
 
-### Errore "Invalid bech32 address"
-Assicurati che l'indirizzo sia nel formato corretto:
-- Mainnet Bitcoin: inizia con `bc1`
-- Testnet Bitcoin: inizia con `tb1`
-- Deve essere un indirizzo SegWit nativo (bech32), non un indirizzo legacy o P2SH-wrapped
+### Errore "Invalid address"
+Assicurati che l'indirizzo o la chiave pubblica siano nel formato corretto:
+- **bech32**: `bc1...` (mainnet) o `tb1...` (testnet).
+- **base58**: Indirizzi legacy P2PKH (es: `1...`).
+- **Chiave pubblica**: Formato esadecimale non compresso (65 byte) o compresso (33 byte).
 
 ### Modulo construct non trovato
 Installa la versione corretta:
@@ -135,10 +140,10 @@ pip install construct==2.5.2
 ## Differenze con la versione originale
 Questa versione modificata include:
 - ✅ Supporto esclusivo per SHA256 (rimossi scrypt, X11, X13, X15)
-- ✅ Utilizzo di indirizzi bech32 invece di chiavi pubbliche raw
+- ✅ Utilizzo di indirizzi bech32, base58 e chiavi pubbliche raw
 - ✅ Parametro `--address` invece di `--pubkey`
-- ✅ Validazione automatica degli indirizzi bech32
-- ✅ Supporto per P2WPKH e P2WSH
+- ✅ Validazione automatica degli indirizzi
+- ✅ Supporto per P2WPKH, P2WSH, P2PKH e P2PK
 - ✅ Codice semplificato e ottimizzato
 
 ## Supporto per la conversione della difficoltà
