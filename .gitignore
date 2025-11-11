@@ -1,0 +1,10 @@
+venv/
+env/
+ENV/
+.venv/
+.env/
+__pycache__/
+.vscode/
+*.log
+*.tmp
+*.bak
