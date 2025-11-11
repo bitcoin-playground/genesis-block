@@ -1,4 +1,4 @@
-import hashlib, binascii, struct, array, os, time, sys, optparse
+import hashlib, binascii, struct, array, os, time, sys, optparse, base58
 from multiprocessing import Process, Event, Queue
 from threading import Thread
 
@@ -105,7 +105,7 @@ def get_args():
   parser.add_option("-n", "--nonce", dest="nonce", default=0,
                    type="int", help="the first value of the nonce that will be incremented when searching the genesis hash")
   parser.add_option("-p", "--address", dest="address", default="bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
-                   type="string", help="the bech32 address for the output script (e.g., bc1q... for mainnet, tb1q... for testnet)")
+                   type="string", help="the bech32, base58, or hex-encoded public key for the output script")
   parser.add_option("-v", "--value", dest="value", default=5000000000,
                    type="int", help="the value in coins for the output, full value (exp. in bitcoin 5000000000 - To get other coins value: Block Value * 100000000)")
   parser.add_option("-b", "--bits", dest="bits",
@@ -138,28 +138,38 @@ def create_input_script(psz_timestamp):
 
 
 def create_output_script(address):
-  # Decode bech32 address to get witness version and witness program
-  witness_version, witness_program = decode_segwit_address(address)
+    try:
+        # Prova a decodificare come indirizzo bech32
+        witness_version, witness_program = decode_segwit_address(address)
+        if witness_version is not None:
+            witness_bytes = bytes(witness_program)
+            if witness_version == 0:
+                version_opcode = 0x00
+            else:
+                version_opcode = 0x50 + witness_version
+            script_len = len(witness_bytes)
+            return bytes([version_opcode, script_len]) + witness_bytes
+    except Exception:
+        pass
 
-  if witness_version is None:
-    sys.exit("Error: Invalid bech32 address")
+    try:
+        # Prova a decodificare come indirizzo base58 (P2PKH)
+        decoded_address = base58.b58decode_check(address)
+        pubkey_hash = decoded_address[1:]  # Rimuovi il byte di versione
+        script = bytes([0x76, 0xa9, 0x14]) + pubkey_hash + bytes([0x88, 0xac])  # OP_DUP OP_HASH160 <20-byte-hash> OP_EQUALVERIFY OP_CHECKSIG
+        return script
+    except Exception:
+        pass
 
-  # Convert witness program list to bytes
-  witness_bytes = bytes(witness_program)
-
-  # Create SegWit output script: OP_<version> <length> <witness_program>
-  # OP_0 = 0x00, OP_1 = 0x51, etc.
-  if witness_version == 0:
-    version_opcode = 0x00
-  else:
-    version_opcode = 0x50 + witness_version
-
-  script_len = len(witness_bytes)
-
-  # Build the output script
-  output_script = bytes([version_opcode, script_len]) + witness_bytes
-
-  return output_script
+    try:
+        # Se fallisce, prova a interpretare come chiave pubblica esadecimale (P2PK)
+        pubkey_bytes = binascii.unhexlify(address)
+        script_len = len(pubkey_bytes)
+        if script_len not in [33, 65]:
+            raise ValueError("La lunghezza della chiave pubblica deve essere 33 o 65 byte")
+        return bytes([script_len]) + pubkey_bytes + bytes([0xac])  # <len> <pubkey> OP_CHECKSIG
+    except (binascii.Error, ValueError) as e:
+        sys.exit(f"Errore: l'argomento '-p' non è un indirizzo bech32, base58 o una chiave pubblica esadecimale valida. Dettagli: {e}")
 
 
 def create_transaction(input_script, output_script,options):
