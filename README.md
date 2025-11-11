@@ -1,4 +1,4 @@
-# GenesisH0
+# Genesis-Block
 Script Python per creare i parametri necessari per un blocco genesis unico con algoritmo SHA256 e supporto per indirizzi SegWit (bech32).
 
 ## Caratteristiche
