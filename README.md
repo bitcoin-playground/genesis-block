@@ -141,6 +141,26 @@ Questa versione modificata include:
 - ✅ Supporto per P2WPKH e P2WSH
 - ✅ Codice semplificato e ottimizzato
 
+## Supporto per la conversione della difficoltà
+
+Per facilitare la configurazione del genesis block, è incluso lo script `calc_diff.py`. Questo strumento converte un valore di difficoltà (anche decimale) nel formato `nBits` esadecimale e nel `target hash` corrispondente, necessari per il file `chainparams.cpp` del nodo.
+
+**Come usarlo:**
+
+```bash
+python calc_diff.py <valore_difficoltà>
+```
+
+**Esempio di output:**
+
+```
+difficoltà: 1
+nBits: 1d00ffff
+target hash: 00000000ffff0000000000000000000000000000000000000000000000000000
+```
+
+L'output fornito può essere usato direttamente per impostare i parametri di difficoltà della tua blockchain.
+
 ## Licenza
 
 Questo progetto è rilasciato sotto la licenza MIT.
