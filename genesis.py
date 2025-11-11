@@ -1,5 +1,6 @@
 import hashlib, binascii, struct, array, os, time, sys, optparse
 from multiprocessing import Process, Event, Queue
+from threading import Thread
 
 from construct import *
 
@@ -221,26 +222,92 @@ def generate_hash(data_block, start_nonce, bits):
   # https://en.bitcoin.it/wiki/Difficulty
   target = (bits & 0xffffff) * 2**(8*((bits >> 24) - 3))
 
+  # Usa bytearray mutabile per evitare concatenazioni ripetute
+  data_block = bytearray(data_block)
+
+  # Pre-alloca oggetti per ridurre overhead
+  sha256 = hashlib.sha256
+
   while True:
-    header_hash  = generate_hashes_from_block(data_block)
-    last_updated = calculate_hashrate(nonce, last_updated)
+    # Calcola hash direttamente inline
+    header_hash = sha256(sha256(data_block).digest()).digest()
+
     if is_genesis_hash(header_hash, target):
-      return (header_hash, nonce)
-    else:
-      nonce      = nonce + 1
-      data_block = data_block[0:len(data_block) - 4] + struct.pack('<I', nonce)  
+      return (header_hash[::-1], nonce)  # Inverti per compatibilità output
+
+    # Calcola hashrate solo ogni milione di hash
+    if nonce % 1000000 == 999999:
+      last_updated = calculate_hashrate(nonce, last_updated)
+
+    nonce += 1
+    # Aggiorna solo gli ultimi 4 byte (nonce)
+    data_block[-4:] = struct.pack('<I', nonce)  
 
 
-def nonce_worker(header_prefix, start_nonce, step, target, result_queue, stop_event):
+def nonce_worker(header_prefix, start_nonce, step, target, result_queue, stop_event, hashrate_queue):
   nonce = start_nonce
+  last_updated = time.time()
+  hashes_done = 0
+  batch_size = 10000  # Controlla stop_event ogni batch_size iterazioni
+
+  # Usa bytearray mutabile per evitare concatenazioni ripetute
+  data_block = bytearray(header_prefix + struct.pack('<I', nonce))
+
+  # Pre-alloca oggetti per ridurre overhead
+  sha256 = hashlib.sha256
+
   while not stop_event.is_set():
-    data_block  = header_prefix + struct.pack('<I', nonce)
-    header_hash = generate_hashes_from_block(data_block)
-    if int(binascii.hexlify(header_hash).decode('ascii'), 16) < target:
-      result_queue.put((header_hash, nonce))
-      stop_event.set()
-      break
-    nonce += step
+    # Processa un batch di nonce prima di controllare stop_event
+    for _ in range(batch_size):
+      # Calcola hash direttamente inline per massime performance
+      header_hash = sha256(sha256(data_block).digest()).digest()
+
+      if is_genesis_hash(header_hash, target):
+        result_queue.put((header_hash[::-1], nonce))  # Inverti per compatibilità output
+        stop_event.set()
+        return
+
+      nonce += step
+      # Aggiorna il nonce nel blocco
+      data_block[-4:] = struct.pack('<I', nonce)
+      hashes_done += 1
+
+    # Invia aggiornamenti hashrate ogni batch
+    now = time.time()
+    elapsed = now - last_updated
+    if elapsed > 0.5:  # Aggiorna ogni 0.5 secondi invece di ogni 100000 hash
+      hashrate_queue.put(hashes_done / elapsed)
+      last_updated = now
+      hashes_done = 0
+
+
+def hashrate_monitor(hashrate_queue, stop_event, bits):
+  """Monitora e visualizza l'hashrate combinato da tutti i worker"""
+  target = (bits & 0xffffff) * 2**(8*((bits >> 24) - 3))
+  hashrates = []
+  last_display = time.time()
+
+  while not stop_event.is_set():
+    try:
+      # Leggi tutti gli aggiornamenti disponibili
+      while not hashrate_queue.empty():
+        hashrate = hashrate_queue.get_nowait()
+        hashrates.append(hashrate)
+
+      # Mostra l'hashrate ogni secondo
+      now = time.time()
+      if now - last_display >= 1.0 and hashrates:
+        total_hashrate = sum(hashrates)
+        avg_hashrate = int(total_hashrate)
+        generation_time = round(pow(2, 32) / avg_hashrate / 3600, 1) if avg_hashrate > 0 else 0
+        sys.stdout.write("\r%s hash/s, estimate: %s h" % (str(avg_hashrate), str(generation_time)))
+        sys.stdout.flush()
+        hashrates = []
+        last_display = now
+
+      time.sleep(0.1)
+    except Exception:
+      pass
 
 
 def generate_hash_parallel(data_block, start_nonce, bits, workers):
@@ -249,10 +316,16 @@ def generate_hash_parallel(data_block, start_nonce, bits, workers):
   header_prefix = data_block[0:len(data_block) - 4]
   stop_event    = Event()
   result_queue  = Queue()
+  hashrate_queue = Queue()
   processes     = []
 
+  # Avvia il thread monitor dell'hashrate
+  monitor_thread = Thread(target=hashrate_monitor, args=(hashrate_queue, stop_event, bits))
+  monitor_thread.daemon = True
+  monitor_thread.start()
+
   for wid in range(workers):
-    p = Process(target=nonce_worker, args=(header_prefix, start_nonce + wid, workers, target, result_queue, stop_event))
+    p = Process(target=nonce_worker, args=(header_prefix, start_nonce + wid, workers, target, result_queue, stop_event, hashrate_queue))
     p.daemon = True
     p.start()
     processes.append(p)
@@ -268,16 +341,21 @@ def generate_hash_parallel(data_block, start_nonce, bits, workers):
     except Exception:
       pass
 
+  # Aspetta che il monitor termini
+  monitor_thread.join(timeout=1)
+  print()  # Nuova linea dopo l'hashrate
+
   return result_hash, result_nonce
 
 
 def generate_hashes_from_block(data_block):
-  header_hash = hashlib.sha256(hashlib.sha256(data_block).digest()).digest()[::-1]
+  header_hash = hashlib.sha256(hashlib.sha256(data_block).digest()).digest()
   return header_hash
 
 
 def is_genesis_hash(header_hash, target):
-  return int(binascii.hexlify(header_hash).decode('ascii'), 16) < target
+  # Confronto diretto in little-endian senza conversioni costose
+  return int.from_bytes(header_hash, byteorder='little') < target
 
 
 def calculate_hashrate(nonce, last_updated):
