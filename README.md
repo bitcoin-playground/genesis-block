@@ -142,4 +142,5 @@ Questa versione modificata include:
 - ✅ Codice semplificato e ottimizzato
 
 ## Licenza
-Questo progetto è basato su [GenesisH0](https://github.com/lhartikk/GenesisH0) originale con modifiche sostanziali.
+
+Questo progetto è rilasciato sotto la licenza MIT.
