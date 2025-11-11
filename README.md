@@ -7,11 +7,27 @@ Script Python per creare i parametri necessari per un blocco genesis unico con a
 - Mining multi-thread per ottimizzare la ricerca del nonce
 - Compatibile con Bitcoin e fork basati su SHA256
 
+## Creazione dell'ambiente virtuale
+
+### Windows
+
+```bash
+python -m venv venv
+.\venv\Scripts\activate
+```
+
+### Linux/macOS
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
 ## Dipendenze
 Installa le dipendenze necessarie:
 
 ```bash
-pip install construct==2.5.2
+pip install -r requirements.txt
 ```
 
 ## Esempi di utilizzo
@@ -134,7 +150,7 @@ Assicurati che l'indirizzo o la chiave pubblica siano nel formato corretto:
 ### Modulo construct non trovato
 Installa la versione corretta:
 ```bash
-pip install construct==2.5.2
+pip install -r requirements.txt
 ```
 
 ## Differenze con la versione originale
